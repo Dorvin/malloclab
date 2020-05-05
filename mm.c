@@ -81,6 +81,8 @@ static void delete_from_free_list(void *ptr);
 static char *heap_listp;
 // point to first free block
 static char *free_list_hdr;
+// pointer for first fit
+static char *first_fit;
 
 /* 
  * mm_init - initialize the malloc package.
@@ -96,6 +98,7 @@ int mm_init(void)
     PUT(heap_listp + (3*WSIZE), PACK(0, 1)); /* Epilogue header */
     heap_listp += (2*WSIZE);
     free_list_hdr = NULL;
+    first_fit = NULL;
 
     /* Extend the empty heap with a free block of CHUNKSIZE bytes */
     if (extend_heap(CHUNKSIZE/WSIZE) == NULL)
@@ -295,20 +298,27 @@ static void place(void *bp, size_t asize)
 static void *find_fit(size_t asize)
 {
     void *blockp = free_list_hdr;
-    void *best_fit = NULL;
-    int uninitialized = 1;
-    size_t best_score;
+    if(first_fit != NULL){
+        blockp = first_fit;
+    }
     while(blockp != NULL){
         if(!GET_ALLOC(HDRP(blockp)) && (GET_SIZE(HDRP(blockp)) >= asize)){
-            if(uninitialized || best_score > (GET_SIZE(HDRP(blockp)) - asize)){
-                uninitialized = 0;
-                best_score = (GET_SIZE(HDRP(blockp)) - asize);
-                best_fit = blockp;
-            }
+            first_fit = GET_NEXT(blockp);
+            return blockp;
         }
         blockp = (void *)GET_NEXT(blockp);
     }
-    return best_fit;
+    if(first_fit != NULL){
+        blockp = free_list_hdr;
+        while(blockp != first_fit){
+            if(!GET_ALLOC(HDRP(blockp)) && (GET_SIZE(HDRP(blockp)) >= asize)){
+                first_fit = GET_NEXT(blockp);;
+                return blockp;
+            }
+            blockp = (void *)GET_NEXT(blockp);
+        }
+    }
+    return NULL;
 }
 
 // insert while keep address order [addr(prev) < addr(curr) < addr(next)]
