@@ -392,7 +392,7 @@ static int mm_check(void)
     int err_count = 0;
     int seg_index = 0;
     void *list_hdr;
-    while(index < SEG_SIZE){
+    while(seg_index < SEG_SIZE){
         list_hdr = GET_SEG_LIST_HDR(seg_lists, seg_index);
         while(list_hdr != NULL){
             if(GET_ALLOC(HDRP(list_hdr))){
