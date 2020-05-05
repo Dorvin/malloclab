@@ -259,8 +259,9 @@ static void place(void *bp, size_t asize)
     if(remain_size >= 2 * DSIZE){
         PUT(HDRP(bp), PACK(asize, 1));
         PUT(FTRP(bp), PACK(asize, 1));
-        PUT(HDRP(bp+asize), PACK(remain_size, 0));
-        PUT(FTRP(bp+asize), PACK(remain_size, 0));
+        bp = NEXT_BLKP(bp);
+        PUT(HDRP(bp), PACK(remain_size, 0));
+        PUT(FTRP(bp), PACK(remain_size, 0));
     } else {
         PUT(HDRP(bp), PACK(origin_size, 1));
         PUT(FTRP(bp), PACK(origin_size, 1));
@@ -271,14 +272,13 @@ static void *find_fit(size_t asize)
 {
     void *blockp = NEXT_BLKP(heap_listp);
     while(blockp < mem_heap_hi()){
-        if(GET_SIZE(HDRP(blockp)) >= asize){
+        if(!GET_ALLOC(HDRP(blockp)) && (GET_SIZE(HDRP(blockp)) >= asize)){
             return blockp;
         }
         blockp = NEXT_BLKP(blockp);
     }
     return NULL;
 }
-
 
 
 
