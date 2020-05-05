@@ -295,13 +295,20 @@ static void place(void *bp, size_t asize)
 static void *find_fit(size_t asize)
 {
     void *blockp = free_list_hdr;
+    void *best_fit = NULL;
+    int uninitialized = 1;
+    size_t best_score;
     while(blockp != NULL){
         if(!GET_ALLOC(HDRP(blockp)) && (GET_SIZE(HDRP(blockp)) >= asize)){
-            return blockp;
+            if(uninitialized || best_score > (GET_SIZE(HDRP(blockp)) - asize)){
+                uninitialized = 0;
+                best_score = (GET_SIZE(HDRP(blockp)) - asize);
+                best_fit = blockp;
+            }
         }
         blockp = (void *)GET_NEXT(blockp);
     }
-    return NULL;
+    return best_fit;
 }
 
 // insert while keep address order [addr(prev) < addr(curr) < addr(next)]
