@@ -1,13 +1,20 @@
+  
 /*
- * mm-naive.c - The fastest, least memory-efficient malloc package.
+ * mm.c - malloc using segregated free list with combination of LIFO & first fit
  * 
- * In this naive approach, a block is allocated by simply incrementing
- * the brk pointer.  A block is pure payload. There are no headers or
- * footers.  Blocks are never coalesced or reused. Realloc is
- * implemented directly using mm_malloc and mm_free.
- *
- * NOTE TO STUDENTS: Replace this header comment with your own header
- * comment that gives a high level description of your solution.
+ * Notice: [WSIZE]
+ * 
+ * Allocated Block: [size + allocation(LSB)][payload][payload]...[padding][padding][size + allocation(LSB)]
+ * Free Block: [size + allocation(LSB)][pointer to prev in seg list][pointer to next in seg list][]...[][size + allocation(LSB)]
+ * 
+ * Structure of Segregated Free List: there are 10 class according to size, described in size_to_index function.
+ * Each block is located in first position of appropraite free list.
+ * It is simillar to Stack, that is LIFO
+ * 
+ * when finding free block to allocate, I used appropraite class according to it's size.
+ * I incremented seg_index when there is no available free block until SEG_SIZE
+ * In each free list, I used first fit strategy 
+ * 
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -28,9 +35,6 @@
 
 /* rounds up to the nearest multiple of ALIGNMENT */
 #define ALIGN(size) (((size) + (ALIGNMENT-1)) & ~0x7)
-
-
-#define SIZE_T_SIZE (ALIGN(sizeof(size_t)))
 
 /* Basic constants and macros from textbook */
 #define WSIZE       4       /* Word and header/footer size (bytes) */
@@ -83,14 +87,14 @@ static void delete_from_free_list(void *ptr);
 
 static int size_to_index(size_t size);
 
-// global variables
+/* global variables */
 // point to prolog block
 static char *heap_listp;
 // segregated lists
 static char *seg_lists;
 
 /* 
- * mm_init - initialize the malloc package.
+ * mm_init - initialize the malloc package and make space for seg_lists, using mem_sbrk
  */
 int mm_init(void)
 {
@@ -116,7 +120,7 @@ int mm_init(void)
 }
 
 /* 
- * mm_malloc - Allocate a block by incrementing the brk pointer.
+ * mm_malloc - Allocate a block by finding appropraite free block in seg_lists.
  *     Always allocate a block whose size is a multiple of the alignment.
  */
 void *mm_malloc(size_t size)
@@ -138,7 +142,7 @@ void *mm_malloc(size_t size)
     if((bp = find_fit(asize)) != NULL){
         place(bp, asize);
         //consistency check...
-        mm_check();
+        //mm_check();
         return bp;
     }
 
@@ -148,12 +152,12 @@ void *mm_malloc(size_t size)
     }
     place(bp, asize);
     //consistency check...
-    mm_check();
+    //mm_check();
     return bp;
 }
 
 /*
- * mm_free - Freeing a block does nothing.
+ * mm_free - Freeing a block that does nothing.
  */
 void mm_free(void *ptr)
 {
@@ -175,11 +179,11 @@ void mm_free(void *ptr)
     coalesce(ptr);
 
     //consistency check...
-    mm_check();
+    //mm_check();
 }
 
 /*
- * mm_realloc - Implemented simply in terms of mm_malloc and mm_free
+ * mm_realloc - Reallocate block, Implemented in terms of mm_malloc and mm_free
  */
 void *mm_realloc(void *ptr, size_t size)
 {
@@ -213,7 +217,7 @@ void *mm_realloc(void *ptr, size_t size)
     if(asize <= GET_SIZE(HDRP(oldptr))){
         place(oldptr, asize);
         //consistency check...
-        mm_check();
+        //mm_check();
         return oldptr;
     }
 
@@ -225,6 +229,9 @@ void *mm_realloc(void *ptr, size_t size)
     return newptr;
 }
 
+/* 
+ * extend_heap - extend heap using mem_sbrk
+ */
 static void *extend_heap(size_t words)
 {
     char *bp;
@@ -244,6 +251,10 @@ static void *extend_heap(size_t words)
     return coalesce(bp);
 }
 
+/* 
+ * coalesce - coalesce continuous free blocks, using footer and header
+ * while deleting and inserting free blocks to seg lists
+ */
 static void *coalesce(void *bp)
 {
     size_t prev_alloc = GET_ALLOC(FTRP(PREV_BLKP(bp)));
@@ -296,8 +307,8 @@ static void *coalesce(void *bp)
 }
 
 /*
-Place the requested block at the beginning of the free block,
-splitting only if the size of the remainder would equal or exceed the minimum block size.
+ * place - place the requested block at the beginning of the free block,
+ * splitting only if the size of the remainder would equal or exceed the minimum block size.
 */
 static void place(void *bp, size_t asize)
 {
@@ -317,7 +328,9 @@ static void place(void *bp, size_t asize)
     }
 }
 
-//first fit
+/* 
+ * find_fit - find approprate free block in seglist according to size, using first fit.
+ */
 static void *find_fit(size_t asize)
 {
     int seg_index = size_to_index(asize);
@@ -335,7 +348,10 @@ static void *find_fit(size_t asize)
     return NULL;
 }
 
-// Segregated & LIFO
+/* 
+ * insert_to_free_list - insert to approprate seg_list using size_to_index.
+ * Insert to firsit position of linked list.
+ */
 static void insert_to_free_list(void *ptr)
 {
     int seg_index = size_to_index(GET_SIZE(HDRP(ptr)));
@@ -347,6 +363,10 @@ static void insert_to_free_list(void *ptr)
     }
     GET_SEG_LIST_HDR(seg_lists, seg_index) = ptr;
 }
+
+/* 
+ * delete_from_free_list - delete from approprate seg_list using size_to_index.
+ */
 static void delete_from_free_list(void *ptr)
 {
     void *prev = (void*)GET_PREV(ptr);
@@ -362,6 +382,9 @@ static void delete_from_free_list(void *ptr)
     }
 }
 
+/* 
+ * size_to_index - divide size into 10 classes.
+ */
 static int size_to_index(size_t size)
 {
     if(size <= 64){
@@ -387,6 +410,9 @@ static int size_to_index(size_t size)
     }
 }
 
+/* 
+ * mm_check - check heap consistency by checking coalescing and allocation bit, looking whole seg_lists
+ */
 static int mm_check(void)
 {
     int err_count = 0;
