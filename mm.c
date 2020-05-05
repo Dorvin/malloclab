@@ -81,8 +81,6 @@ static void delete_from_free_list(void *ptr);
 static char *heap_listp;
 // point to first free block
 static char *free_list_hdr;
-// pointer for first fit
-static char *first_fit;
 
 /* 
  * mm_init - initialize the malloc package.
@@ -298,25 +296,11 @@ static void place(void *bp, size_t asize)
 static void *find_fit(size_t asize)
 {
     void *blockp = free_list_hdr;
-    if(first_fit != NULL){
-        blockp = first_fit;
-    }
     while(blockp != NULL){
         if(!GET_ALLOC(HDRP(blockp)) && (GET_SIZE(HDRP(blockp)) >= asize)){
-            first_fit = GET_NEXT(blockp);
             return blockp;
         }
         blockp = (void *)GET_NEXT(blockp);
-    }
-    if(first_fit != NULL){
-        blockp = free_list_hdr;
-        while(blockp != first_fit){
-            if(!GET_ALLOC(HDRP(blockp)) && (GET_SIZE(HDRP(blockp)) >= asize)){
-                first_fit = GET_NEXT(blockp);;
-                return blockp;
-            }
-            blockp = (void *)GET_NEXT(blockp);
-        }
     }
     return NULL;
 }
