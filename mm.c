@@ -71,6 +71,8 @@
 #define GET_SEG_LIST_HDR(root, index)  *((char **)root+index)
 
 // prototype of functions
+static int mm_check(void);
+
 static void *extend_heap(size_t words);
 static void *coalesce(void *bp);
 static void place(void *bp, size_t asize);
@@ -135,6 +137,8 @@ void *mm_malloc(size_t size)
 
     if((bp = find_fit(asize)) != NULL){
         place(bp, asize);
+        //consistency check...
+        mm_check();
         return bp;
     }
 
@@ -143,6 +147,8 @@ void *mm_malloc(size_t size)
         return NULL;
     }
     place(bp, asize);
+    //consistency check...
+    mm_check();
     return bp;
 }
 
@@ -167,6 +173,9 @@ void mm_free(void *ptr)
     PUT(HDRP(ptr), PACK(size, 0));
     PUT(FTRP(ptr), PACK(size, 0));
     coalesce(ptr);
+
+    //consistency check...
+    mm_check();
 }
 
 /*
@@ -203,6 +212,8 @@ void *mm_realloc(void *ptr, size_t size)
 
     if(asize <= GET_SIZE(HDRP(oldptr))){
         place(oldptr, asize);
+        //consistency check...
+        mm_check();
         return oldptr;
     }
 
@@ -373,5 +384,32 @@ static int size_to_index(size_t size)
         return 8;
     } else {
         return 9;
+    }
+}
+
+static int mm_check(void)
+{
+    int err_count = 0;
+    int seg_index = 0;
+    void *list_hdr;
+    while(index < SEG_SIZE){
+        list_hdr = GET_SEG_LIST_HDR(seg_lists, seg_index);
+        while(list_hdr != NULL){
+            if(GET_ALLOC(HDRP(list_hdr))){
+                printf("err: allocated block is located in free list\n");
+                err_count++;
+            }
+            if(!GET_ALLOC(PREV_BLKP(list_hdr)) || !GET_ALLOC(NEXT_BLKP(list_hdr))){
+                printf("err: coalescing has failed\n");
+                err_count++;
+            }
+            list_hdr = GET_NEXT(list_hdr);
+        }
+        seg_index++;
+    }
+    if(err_count == 0){
+        return 1;
+    } else {
+        return 0;
     }
 }
