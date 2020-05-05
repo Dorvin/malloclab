@@ -61,11 +61,14 @@
 // PREV_BLKP require Footer of prev block to be right value
 #define PREV_BLKP(bp) ((char *)(bp) - GET_SIZE(((char *)(bp) - DSIZE)))
 
-// macros for free list
+// constants and macros for free list
 #define SET_PREV(bp, prev_bp)   (*((char**)(bp)) = prev_bp)
 #define SET_NEXT(bp, next_bp)   (*((char**)(bp + WSIZE)) = next_bp)
 #define GET_PREV(bp)            (*(char**)(bp))
 #define GET_NEXT(bp)            (*(char**)(bp + WSIZE))
+
+#define SEG_SIZE 10
+#define GET_SEG_LIST_HDR(root, index)  *((char **)root+index)
 
 // prototype of functions
 static void *extend_heap(size_t words);
@@ -79,14 +82,20 @@ static void delete_from_free_list(void *ptr);
 // global variables
 // point to prolog block
 static char *heap_listp;
-// point to first free block
-static char *free_list_hdr;
+// segregated lists
+static char *seg_lists;
 
 /* 
  * mm_init - initialize the malloc package.
  */
 int mm_init(void)
 {
+    int index;
+    seg_lists = mem_sbrk(SEG_SIZE * WSIZE);
+    for(index = 0; index < SEG_SIZE; index++){
+        GET_SEG_LIST_HDR(seg_lists, index) = NULL;
+    }
+
     /* Create the initial empty heap */
     if ((heap_listp = mem_sbrk(4*WSIZE)) == (void *)-1)
         return -1;
@@ -95,7 +104,6 @@ int mm_init(void)
     PUT(heap_listp + (2*WSIZE), PACK(DSIZE, 1)); /* Prologue footer */
     PUT(heap_listp + (3*WSIZE), PACK(0, 1)); /* Epilogue header */
     heap_listp += (2*WSIZE);
-    free_list_hdr = NULL;
 
     /* Extend the empty heap with a free block of CHUNKSIZE bytes */
     if (extend_heap(CHUNKSIZE/WSIZE) == NULL)
@@ -229,6 +237,7 @@ static void *coalesce(void *bp)
     size_t next_alloc = GET_ALLOC(HDRP(NEXT_BLKP(bp)));
     size_t size = GET_SIZE(HDRP(bp));
     void *next = NEXT_BLKP(bp);
+    void *prev = PREV_BLKP(bp);
 
     // Case 1
     // nothing is free
@@ -250,20 +259,24 @@ static void *coalesce(void *bp)
     // Case 3
     // only prev is free
     else if (!prev_alloc && next_alloc) {
+        delete_from_free_list(prev);
         size += GET_SIZE(HDRP(PREV_BLKP(bp)));
         PUT(FTRP(bp), PACK(size, 0));
         PUT(HDRP(PREV_BLKP(bp)), PACK(size, 0));
         bp = PREV_BLKP(bp);
+        insert_to_free_list(bp);
     }
 
     // Case 4
     // both are free
     else {
+        delete_from_free_list(prev);
         delete_from_free_list(next);
         size += GET_SIZE(HDRP(PREV_BLKP(bp))) + GET_SIZE(FTRP(NEXT_BLKP(bp)));
         PUT(HDRP(PREV_BLKP(bp)), PACK(size, 0));
         PUT(FTRP(NEXT_BLKP(bp)), PACK(size, 0));
         bp = PREV_BLKP(bp);
+        insert_to_free_list(bp);
     }
 
     return bp;
@@ -294,54 +307,68 @@ static void place(void *bp, size_t asize)
 //first fit
 static void *find_fit(size_t asize)
 {
-    void *blockp = free_list_hdr;
-    while(blockp != NULL){
-        if(!GET_ALLOC(HDRP(blockp)) && (GET_SIZE(HDRP(blockp)) >= asize)){
-            return blockp;
+    int seg_index = size_to_index(asize);
+    void *blockp;
+    while(seg_index < 10){
+        blockp = = GET_SEG_LIST_HDR(seg_lists, seg_index);
+        while(blockp != NULL){
+            if(!GET_ALLOC(HDRP(blockp)) && (GET_SIZE(HDRP(blockp)) >= asize)){
+                return blockp;
+            }
+            blockp = (void *)GET_NEXT(blockp);
         }
-        blockp = (void *)GET_NEXT(blockp);
+        seg_index++;
     }
     return NULL;
 }
 
-// insert while keep address order [addr(prev) < addr(curr) < addr(next)]
+// Segregated & LIFO
 static void insert_to_free_list(void *ptr)
 {
+    int seg_index = size_to_index(GET_SIZE(HDRP(ptr)));
+    void *list_hdr = GET_SEG_LIST_HDR(seg_lists, seg_index);
     SET_PREV(ptr, NULL);
-    SET_NEXT(ptr, free_list_hdr);
-    if(free_list_hdr != NULL){
-        SET_PREV(free_list_hdr, ptr);
+    SET_NEXT(ptr, list_hdr);
+    if(list_hdr != NULL){
+        SET_PREV(list_hdr, ptr);
     }
-    free_list_hdr = ptr;
-    /*    
-    void *prev = NULL;
-    void *curr = free_list_hdr;
-    while(curr != NULL && curr < ptr){
-        prev = curr;
-        curr = GET_NEXT(curr);
-    }
-    if(prev != NULL){
-        SET_NEXT(prev, ptr);
-    } else {
-        free_list_hdr = ptr;
-    }
-    SET_PREV(ptr, prev);
-    SET_NEXT(ptr, curr);
-    if(curr != NULL){
-        SET_PREV(curr, ptr);
-    }
-    */
+    list_hdr = ptr;
 }
 static void delete_from_free_list(void *ptr)
 {
     void *prev = (void*)GET_PREV(ptr);
     void *next = (void*)GET_NEXT(ptr);
+    int seg_index = size_to_index(GET_SIZE(HDRP(ptr)));
     if(prev != NULL){
         SET_NEXT(prev, next);
     } else {
-        free_list_hdr = next;
+        GET_SEG_LIST_HDR(seg_lists, seg_index) = next;
     }
     if(next != NULL){
         SET_PREV(next, prev);
+    }
+}
+
+static int size_to_index(size_t size){
+    if(size <= 64){
+        return 0;
+    } else if(size <= 128){
+        return 1;
+    } else if(size <= 256){
+        return 2;
+    } else if(size <= 512){
+        return 3;
+    } else if(size <= 1024){
+        return 4;
+    } else if(size <= 2048){
+        return 5;
+    } else if(size <= 4096){
+        return 6;
+    } else if(size <= 8192){
+        return 7;
+    } else if(size <= 16384){
+        return 8;
+    } else {
+        return 9;
     }
 }
