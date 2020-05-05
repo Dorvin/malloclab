@@ -79,6 +79,8 @@ static void *find_fit(size_t asize);
 static void insert_to_free_list(void *ptr);
 static void delete_from_free_list(void *ptr);
 
+static int size_to_index(size_t size);
+
 // global variables
 // point to prolog block
 static char *heap_listp;
@@ -310,7 +312,7 @@ static void *find_fit(size_t asize)
     int seg_index = size_to_index(asize);
     void *blockp;
     while(seg_index < 10){
-        blockp = = GET_SEG_LIST_HDR(seg_lists, seg_index);
+        blockp = GET_SEG_LIST_HDR(seg_lists, seg_index);
         while(blockp != NULL){
             if(!GET_ALLOC(HDRP(blockp)) && (GET_SIZE(HDRP(blockp)) >= asize)){
                 return blockp;
@@ -349,7 +351,8 @@ static void delete_from_free_list(void *ptr)
     }
 }
 
-static int size_to_index(size_t size){
+static int size_to_index(size_t size)
+{
     if(size <= 64){
         return 0;
     } else if(size <= 128){
