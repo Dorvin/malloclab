@@ -399,11 +399,10 @@ static int mm_check(void)
                 printf("err: allocated block is located in free list\n");
                 err_count++;
             }
-            /*
-            if(!GET_ALLOC(PREV_BLKP(list_hdr)) || !GET_ALLOC(NEXT_BLKP(list_hdr))){
+            if(!GET_ALLOC(FTRP(PREV_BLKP(list_hdr))) || !GET_ALLOC(HDRP(NEXT_BLKP(list_hdr)))){
                 printf("err: coalescing has failed\n");
                 err_count++;
-            }*/
+            }
             list_hdr = GET_NEXT(list_hdr);
         }
         seg_index++;
