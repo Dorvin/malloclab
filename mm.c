@@ -307,6 +307,13 @@ static void *find_fit(size_t asize)
 // insert while keep address order [addr(prev) < addr(curr) < addr(next)]
 static void insert_to_free_list(void *ptr)
 {
+    SET_PREV(ptr, NULL);
+    SET_NEXT(ptr, free_list_hdr);
+    if(free_list_hdr != NULL){
+        SET_PREV(free_list_hdr, ptr);
+    }
+    free_list_hdr = ptr;
+    /*    
     void *prev = NULL;
     void *curr = free_list_hdr;
     while(curr != NULL && curr < ptr){
@@ -323,6 +330,7 @@ static void insert_to_free_list(void *ptr)
     if(curr != NULL){
         SET_PREV(curr, ptr);
     }
+    */
 }
 static void delete_from_free_list(void *ptr)
 {
