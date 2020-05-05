@@ -228,7 +228,6 @@ static void *coalesce(void *bp)
     size_t prev_alloc = GET_ALLOC(FTRP(PREV_BLKP(bp)));
     size_t next_alloc = GET_ALLOC(HDRP(NEXT_BLKP(bp)));
     size_t size = GET_SIZE(HDRP(bp));
-    void *prev = PREV_BLKP(bp);
     void *next = NEXT_BLKP(bp);
 
     // Case 1
