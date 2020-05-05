@@ -61,15 +61,26 @@
 // PREV_BLKP require Footer of prev block to be right value
 #define PREV_BLKP(bp) ((char *)(bp) - GET_SIZE(((char *)(bp) - DSIZE)))
 
+// macros for free list
+#define SET_PREV(bp, prev_bp)   (*((char**)(bp)) = prev_bp)
+#define SET_NEXT(bp, next_bp)   (*((char**)(bp + WSIZE)) = next_bp)
+#define GET_PREV(bp)            (*(char**)(bp))
+#define GET_NEXT(bp)            (*(char**)(bp + WSIZE))
+
 // prototype of functions
 static void *extend_heap(size_t words);
 static void *coalesce(void *bp);
 static void place(void *bp, size_t asize);
 static void *find_fit(size_t asize);
 
+static void insert_to_free_list(void *ptr);
+static void delete_from_free_list(void *ptr);
+
 // global variables
 // point to prolog block
 static char *heap_listp;
+// point to first free block
+static char *free_list_hdr;
 
 /* 
  * mm_init - initialize the malloc package.
@@ -84,6 +95,7 @@ int mm_init(void)
     PUT(heap_listp + (2*WSIZE), PACK(DSIZE, 1)); /* Prologue footer */
     PUT(heap_listp + (3*WSIZE), PACK(0, 1)); /* Epilogue header */
     heap_listp += (2*WSIZE);
+    free_list_hdr = NULL;
 
     /* Extend the empty heap with a free block of CHUNKSIZE bytes */
     if (extend_heap(CHUNKSIZE/WSIZE) == NULL)
@@ -216,20 +228,28 @@ static void *coalesce(void *bp)
     size_t prev_alloc = GET_ALLOC(FTRP(PREV_BLKP(bp)));
     size_t next_alloc = GET_ALLOC(HDRP(NEXT_BLKP(bp)));
     size_t size = GET_SIZE(HDRP(bp));
+    void *prev = PREV_BLKP(bp);
+    void *next = NEXT_BLKP(bp);
 
     // Case 1
+    // nothing is free
     if (prev_alloc && next_alloc) {
+        insert_to_free_list(bp);
         return bp;
     }
 
     // Case 2
+    // only next is free
     else if (prev_alloc && !next_alloc) {
+        delete_from_free_list(next);
         size += GET_SIZE(HDRP(NEXT_BLKP(bp)));
         PUT(HDRP(bp), PACK(size, 0));
         PUT(FTRP(bp), PACK(size,0));
+        insert_to_free_list(bp);
     }
 
     // Case 3
+    // only prev is free
     else if (!prev_alloc && next_alloc) {
         size += GET_SIZE(HDRP(PREV_BLKP(bp)));
         PUT(FTRP(bp), PACK(size, 0));
@@ -238,7 +258,9 @@ static void *coalesce(void *bp)
     }
 
     // Case 4
+    // both are free
     else {
+        delete_from_free_list(next);
         size += GET_SIZE(HDRP(PREV_BLKP(bp))) + GET_SIZE(FTRP(NEXT_BLKP(bp)));
         PUT(HDRP(PREV_BLKP(bp)), PACK(size, 0));
         PUT(FTRP(NEXT_BLKP(bp)), PACK(size, 0));
@@ -254,6 +276,7 @@ splitting only if the size of the remainder would equal or exceed the minimum bl
 */
 static void place(void *bp, size_t asize)
 {
+    delete_from_free_list(bp);
     int origin_size = GET_SIZE(HDRP(bp));
     int remain_size =  origin_size - asize;
     if(remain_size >= 2 * DSIZE){
@@ -262,20 +285,56 @@ static void place(void *bp, size_t asize)
         bp = NEXT_BLKP(bp);
         PUT(HDRP(bp), PACK(remain_size, 0));
         PUT(FTRP(bp), PACK(remain_size, 0));
+        insert_to_free_list(bp);
     } else {
         PUT(HDRP(bp), PACK(origin_size, 1));
         PUT(FTRP(bp), PACK(origin_size, 1));
     }
 }
 
+//first fit
 static void *find_fit(size_t asize)
 {
-    void *blockp = NEXT_BLKP(heap_listp);
-    while(GET_SIZE(HDRP(blockp)) > 0){
+    void *blockp = free_list_hdr;
+    while(blockp != NULL){
         if(!GET_ALLOC(HDRP(blockp)) && (GET_SIZE(HDRP(blockp)) >= asize)){
             return blockp;
         }
-        blockp = NEXT_BLKP(blockp);
+        blockp = (void *)GET_NEXT(blockp);
     }
     return NULL;
+}
+
+// insert while keep address order [addr(prev) < addr(curr) < addr(next)]
+static void insert_to_free_list(void *ptr)
+{
+    void *prev = NULL;
+    void *curr = free_list_hdr;
+    while(curr != NULL && curr < ptr){
+        prev = curr;
+        curr = GET_NEXT(curr);
+    }
+    if(prev != NULL){
+        SET_NEXT(prev, ptr);
+    } else {
+        free_list_hdr = ptr;
+    }
+    SET_PREV(ptr, prev);
+    SET_NEXT(ptr, curr);
+    if(curr != NULL){
+        SET_PREV(curr, ptr);
+    }
+}
+static void delete_from_free_list(void *ptr)
+{
+    void *prev = (void*)GET_PREV(ptr);
+    void *next = (void*)GET_NEXT(ptr);
+    if(prev != NULL){
+        SET_NEXT(prev, next);
+    } else {
+        free_list_hdr = next;
+    }
+    if(next != NULL){
+        SET_PREV(next, prev);
+    }
 }
