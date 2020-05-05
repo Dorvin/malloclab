@@ -311,7 +311,7 @@ static void *find_fit(size_t asize)
 {
     int seg_index = size_to_index(asize);
     void *blockp;
-    while(seg_index < 10){
+    while(seg_index < SEG_SIZE){
         blockp = GET_SEG_LIST_HDR(seg_lists, seg_index);
         while(blockp != NULL){
             if(!GET_ALLOC(HDRP(blockp)) && (GET_SIZE(HDRP(blockp)) >= asize)){
@@ -334,7 +334,7 @@ static void insert_to_free_list(void *ptr)
     if(list_hdr != NULL){
         SET_PREV(list_hdr, ptr);
     }
-    list_hdr = ptr;
+    GET_SEG_LIST_HDR(seg_lists, seg_index) = ptr;
 }
 static void delete_from_free_list(void *ptr)
 {
