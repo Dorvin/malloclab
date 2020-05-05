@@ -271,7 +271,7 @@ static void place(void *bp, size_t asize)
 static void *find_fit(size_t asize)
 {
     void *blockp = NEXT_BLKP(heap_listp);
-    while(blockp < mem_heap_hi()){
+    while(GET_SIZE(HDRP(blockp)) > 0){
         if(!GET_ALLOC(HDRP(blockp)) && (GET_SIZE(HDRP(blockp)) >= asize)){
             return blockp;
         }
@@ -279,16 +279,3 @@ static void *find_fit(size_t asize)
     }
     return NULL;
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
