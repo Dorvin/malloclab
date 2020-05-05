@@ -129,11 +129,11 @@ void *mm_malloc(size_t size)
  */
 void mm_free(void *ptr)
 {
-    size_t size = GET_SIZE(HDRP(bp));
+    size_t size = GET_SIZE(HDRP(ptr));
     if(ptr == NULL){
         return;
     }
-    if(ptr < mem_heap_lo() || mem_heap_hi < ptr){
+    if(ptr < mem_heap_lo() || mem_heap_hi() < ptr){
         return;
     }
     if(GET_ALLOC(HDRP(ptr)) != 1){
@@ -142,9 +142,9 @@ void mm_free(void *ptr)
     if(GET(HDRP(ptr)) != GET(FTRP(ptr))){
         return;
     }
-    PUT(HDRP(bp), PACK(size, 0));
-    PUT(FTRP(bp), PACK(size, 0));
-    coalesce(bp);
+    PUT(HDRP(ptr), PACK(size, 0));
+    PUT(FTRP(ptr), PACK(size, 0));
+    coalesce(ptr);
 }
 
 /*
@@ -155,7 +155,6 @@ void *mm_realloc(void *ptr, size_t size)
     void *oldptr = ptr;
     void *newptr;
     size_t asize;
-    size_t copySize;
 
     if(ptr == NULL){
         return mm_malloc(size);
@@ -164,7 +163,7 @@ void *mm_realloc(void *ptr, size_t size)
         mm_free(ptr);
         return NULL;
     }
-    if(ptr < mem_heap_lo() || mem_heap_hi < ptr){
+    if(ptr < mem_heap_lo() || mem_heap_hi() < ptr){
         return mm_malloc(size);
     }
     if(GET_ALLOC(HDRP(ptr)) != 1){
